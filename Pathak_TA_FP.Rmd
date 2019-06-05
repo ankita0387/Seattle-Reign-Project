@@ -1,0 +1,2382 @@
+---
+title: "Seattle_ReignFC_Case_Study"
+author: "Ankita Pathak"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+   html_notebook:
+     toc: true
+     toc_float:
+      toc_collapsed: true
+     toc_depth: 4
+---
+
+Clear Environment
+=================
+
+```{r}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+```
+
+Load Packages
+=========================================
+
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)     # For wrangling, subseting, and ploting
+library(lubridate)     # For working with dates
+library(stringr)        # Used to manipulate strings
+library(GGally)        # For ggpairs, a detailed correlation graphic
+library(gridExtra)     # For grouping graphs
+library(janitor)       # Tidy cross tabs
+library(MultinomialCI) # To calculate multinomial confidence intervals  
+library(htmlTable)     # To format html tables
+library(psych)
+library(flexdashboard)
+library(here)
+library(plotly)
+library(kableExtra)
+library(scales)
+library(cowplot)
+```
+
+Standard EDA Process
+=========================================
+
+1. Univariate non-graphical  
+   - categorical (i.e. **factor**)   
+      - count, proportion, percentage  
+   - quantitative   
+      - central tendancy, dispersion, skewness, kurtosis, etc  
+
+2. Univariate graphical  
+   - categorical    
+      - histogram or barplot of factors, pie chart  
+   - quantitative   
+      - histogram (try different bin) or density, boxplot, quantile-normal plot  
+
+3. Multi-variate non-graphical  
+   - categorical 
+      - cross-tabluation if multiple categorical variables   
+   - quantitative   
+      - correlation (and covariance)  
+
+4. Multi-variate graphical  
+   - categorical    
+      - tile graph  
+   - quantitative   
+      - scatter plot, correlation plot 
+   - categorical and quantitative 
+      - distribution or summary of quantitative by level of categorical variable  
+      - multiple boxplots  
+      - scatter plot with color, size, or shape by factor or continuous variable  
+
+
+Load and review data
+=========================================
+## Work with datasets
+
+ - Load and work with seattle_reign
+
+```{r}
+# Load data
+seattle_reign <- read.csv("Seattle_Reign.csv")
+
+# Work with a copy of prod_data
+seattle_reign_raw_data <- seattle_reign
+
+# Review data structure
+#str(seattle_reign)
+
+#summary(seattle_reign)
+
+```
+
+Filtering required data
+==========================
+
+```{r warning=FALSE, message=FALSE}
+
+# Filtering required variables based on the data dictionary
+# factor_1 = attendance
+# factor_2 = sales
+# factor_3 = media
+# factor_4 = merchandise
+# factor_5 = demographics
+# factor_6 = satisfaction
+seattle_reign <- seattle_reign_raw_data %>%
+  mutate(
+         factor1_attend = as.factor(Attend1),
+         att_first_attend = case_when(Attend2 == 2013 ~ "Attended_2013",
+                                           Attend2 == 2014 ~ "Attended_2014",
+                                           Attend2 == 2015 ~ "Attended_2015",
+                                           Attend2 == 2016 ~ "Attended_2016",
+                                           TRUE ~ "NotAttended"),
+         att_first_attend = as.factor(att_first_attend),
+         att_attend_2016 = case_when(Attend3 == "Yes" ~ "1",                                                                                               TRUE ~ "0"),
+         att_attend_2016 = as.factor(att_attend_2016),
+         att_interest = case_when(str_detect(Interest,"I live and die with this team") ~ "Die_heart_fan",
+                              str_detect(Interest,"I consider myself to be a loyal fan of this team") ~ "Loyal_fan",
+                              str_detect(Interest,"I consider myself to be a moderate fan of this team") ~ "Moderate_fan",
+                              str_detect(Interest,"I consider myself to be a low-level fan of this team") ~ "Low_level_fan",
+                              TRUE ~ "Less_interest"), 
+         att_interest = as.factor(att_interest),
+         att_gamewith = case_when(Gamewit1 == 1 ~ "Family",
+                              Gamewit2 == 1 ~ "Friends",
+                              Gamewit3 == 1 ~ "Business Associates",
+                              Gamewit4 == 1 ~ "I attend games by myself",
+                              TRUE ~ "NotApplicable"),
+         att_gamewith = as.factor(att_gamewith),
+         att_distance = (Travel5),
+         att_travel_mode = as.factor(Travel6),
+         att_promo_effect = case_when(str_detect(Promo1,"Has no influence on my attendance") ~ "No influence",
+                                   str_detect(Promo1,"Has a positive influence on my attendance") ~ "Positive influence",
+                                   str_detect(Promo1,"Had a negative influence on my attendance") ~ "Negative influence",
+                                   TRUE ~ "Unknown"),
+         att_promo_effect = as.factor(att_promo_effect),
+         att_player_fan1 = case_when(str_detect(IDplay1,"Agree") ~ "1",
+                                      str_detect(IDplay1,"Disagree") ~ "2",
+                                      str_detect(IDplay1,"Somewhat disagree") ~ "2",
+                                      str_detect(IDplay1,"Somewhat agree") ~ "1",
+                                      str_detect(IDplay1,"Strongly agree") ~ "1",
+                                      str_detect(IDplay1,"Strongly Disagree") ~ "2",
+                                      TRUE ~ "0"),
+         
+         att_attend_2017_1 = case_when(str_detect(Attend17,"Agree") ~ "1",
+                                      str_detect(Attend17,"Disagree") ~ "2",
+                                      str_detect(Attend17,"Somewhat disagree") ~ "2",
+                                      str_detect(Attend17,"Somewhat agree") ~ "1",
+                                      str_detect(Attend17,"Strongly agree") ~ "1",
+                                      str_detect(Attend17,"Strongly Disagree") ~ "2",
+                                      TRUE ~ "0"),
+         att_player_fan = case_when(att_player_fan1 == 1 ~ "Player_Fan",
+                                           att_player_fan1 == 2 ~ "Not_a_Player_Fan",
+                                           att_player_fan1 == 0 ~ "Neutral"),
+         att_attend_2017 = case_when(att_attend_2017_1 == 1 ~ "1",
+                                           att_attend_2017_1 == 2 ~ "0",
+                                           att_attend_2017_1 == 0 ~ "0"),
+         att_player_fan = as.factor(att_player_fan),
+         att_attend_2017 = as.factor(att_attend_2017),
+         att_most_pref_time = case_when(GameTim1==1 ~ "Wed Evenings",
+                                          GameTim1==2 ~ "Friday Evenings",
+                                          GameTim1==3 ~ "Saturday Afternoons 1pm",
+                                          GameTim1==4 ~ "Saturday Afternoons 4pm",
+                                          GameTim1==5 ~ "Saturday Evenings",
+                                          GameTim1==6 ~ "Sunday Afternoons 4pm",
+                                          GameTim1==7 ~ "Sunday Evenings",
+                                          TRUE ~ "NoPreference"),
+         att_most_pref_time = as.factor(att_most_pref_time),
+         att_least_preferred_timing = case_when(GameTim7==1 ~ "Wed Evenings",
+                                          GameTim7==2 ~ "Friday Evenings",
+                                          GameTim7==3 ~ "Saturday Afternoons 1pm",
+                                          GameTim7==4 ~ "Saturday Afternoons 4pm",
+                                          GameTim7==5 ~ "Saturday Evenings",
+                                          GameTim7==6 ~ "Sunday Afternoons 4pm",
+                                          GameTim7==7 ~ "Sunday Evenings",
+                                          TRUE ~ "NoPreference"),
+         att_least_preferred_timing = as.factor(att_least_preferred_timing),
+         
+         sales_ticket_type = as.factor(lasttype),
+         sales_numofmatch_2017 = (Gamepln1),
+         sales_tkt_type_2017 = case_when(Gampln2a == 1 ~ "Season Ticket",
+                              Gampln2b == 1 ~ "5 Match Pack",
+                              Gampln2c == 1 ~ "3 Match Pack",
+                              Gampln2d == 1 ~ "Single Match",
+                              Gampln2e == 1 ~ "Pitchside Table",
+                              Gampln2f == 1 ~ "Undecided"),
+         sales_tkt_type_2017 = as.factor(sales_tkt_type_2017),
+         media_web = case_when(Media8_1 == 1|Media8_2 == 1|Media8_3==1|Media8_4==1|Media8_5==1 ~ "Website",                                          Media8_1 == 2|Media8_2 == 2|Media8_3==2|Media8_4==2|Media8_5==2 ~ "Facebook",
+                              Media8_1 == 3|Media8_2 == 3|Media8_3==3|Media8_4==3|Media8_5==3 ~ "Twitter",
+                              Media8_1 == 4|Media8_2 == 4|Media8_3==4|Media8_4==4|Media8_5==4 ~ "Instragram",
+                              Media8_1 == 5|Media8_2 == 5|Media8_3==5|Media8_4==5|Media8_5==5 ~ "Youtube",
+                              TRUE ~ "NotAvailable"),
+         media_web = as.factor(media_web),
+         media_season_newspaper = (Media9),
+         media_season_tv = (Media10),
+         media_ads1 = case_when(str_detect(Media1,"Has no influence on my attendance") ~ "No_inf_newspaper",
+                                   str_detect(Media1,"Has a positive influence on my attendance") ~ "Newspaper_pos",
+                                   str_detect(Media1,"Had a negative influence on my attendance") ~ "Newspaper_neg",
+                                   TRUE ~ "Unknown"),
+         media_ads3 = case_when(str_detect(Media3,"Has no influence on my attendance") ~ "No_inf_FCBillboard",
+                                   str_detect(Media3,"Has a positive influence on my attendance") ~ "FCBillboard_pos",
+                                   str_detect(Media3,"Had a negative influence on my attendance") ~ "FCBillboard_neg",
+                                   TRUE ~ "Unknown"),
+         media_ads4 = case_when(str_detect(Media4,"Has no influence on my attendance") ~ "No_infl_radio",
+                                   str_detect(Media4,"Has a positive influence on my attendance") ~ "Radio_positive",
+                                   str_detect(Media4,"Had a negative influence on my attendance") ~ "Radio_negative",
+                                   TRUE ~ "Unknown"),
+         media_ads6 = case_when(str_detect(Media6,"Has no influence on my attendance") ~ "No_infl_internet",
+                                   str_detect(Media6,"Has a positive influence on my attendance") ~ "internet_positive",
+                                   str_detect(Media6,"Had a negative influence on my attendance") ~ "internet_negative",
+                                   TRUE ~ "Unknown"),
+         media_ads = case_when(media_ads1 == "Newspaper_pos" ~ "Newspaper_ads",
+                                  media_ads3 == "FCBillboard_pos" ~ "FCBillboard_ads",
+                                  media_ads4 == "Radio_positive" ~ "Radio_ads",
+                                  media_ads6 == "internet_positive" ~ "Internet_ads"
+          ),
+         media_ads = as.factor(media_ads),
+         media_ads1 = as.factor(media_ads1),
+         media_ads3 = as.factor(media_ads3),
+         media_ads4 = as.factor(media_ads4),
+         media_ads6 = as.factor(media_ads6),
+         mer_buy_online1 = case_when(str_detect(Buyonl1,"Agree") ~ "1",
+                                      str_detect(Buyonl1,"Disagree") ~ "2",
+                                      str_detect(Buyonl1,"Somewhat disagree") ~ "2",
+                                      str_detect(Buyonl1,"Somewhat agree") ~ "1",
+                                      str_detect(Buyonl1,"Strongly agree") ~ "1",
+                                      str_detect(Buyonl1,"Strongly Disagree") ~ "2",
+                                      TRUE ~ "0"),
+         mer_buy_online1 = as.factor(mer_buy_online1),
+         mer_buy_match1 = case_when(str_detect(BuyMat1,"Agree") ~ "1",
+                                      str_detect(BuyMat1,"Disagree") ~ "2",
+                                      str_detect(BuyMat1,"Somewhat disagree") ~ "2",
+                                      str_detect(BuyMat1,"Somewhat agree") ~ "1",
+                                      str_detect(BuyMat1,"Strongly agree") ~ "1",
+                                      str_detect(BuyMat1,"Strongly Disagree") ~ "2",
+                                      TRUE ~ "0"),
+         mer_buy_match1 = as.factor(mer_buy_match1),
+         mer_buy_store1 = case_when(str_detect(BuyStor1,"Agree") ~ "1",
+                                      str_detect(BuyStor1,"Disagree") ~ "2",
+                                      str_detect(BuyStor1,"Somewhat disagree") ~ "2",
+                                      str_detect(BuyStor1,"Somewhat agree") ~ "1",
+                                      str_detect(BuyStor1,"Strongly agree") ~ "1",
+                                      str_detect(BuyStor1,"Strongly Disagree") ~ "2",
+                                      TRUE ~ "0"),
+         mer_buy_store1 = as.factor(mer_buy_store1),
+         mer_buy_online = case_when(mer_buy_online1 == 1 ~ "Buy_Online",
+                                           mer_buy_online1 == 2 ~ "DoNot_Buy_Online",
+                                           mer_buy_online1 == 0 ~ "Neutral"),
+         mer_buy_match = case_when(mer_buy_match1 == 1 ~ "Buy_atMatch",
+                                           mer_buy_match1 == 2 ~ "DoNot_Buy_atMatch",
+                                           mer_buy_match1 == 0 ~ "Neutral"),
+         mer_buy_store = case_when(mer_buy_store1 == 1 ~ "Buy_atStore",
+                                           mer_buy_store1 == 2 ~ "DoNot_Buy_atStore",
+                                           mer_buy_store1 == 0 ~ "Neutral"),
+         mer_buy_online = as.factor(mer_buy_online),
+         mer_buy_match = as.factor(mer_buy_match),
+         mer_buy_store = as.factor(mer_buy_store),
+         mer_buy_pref = case_when(mer_buy_online == "Buy_Online" ~ "Online",
+                                                mer_buy_match == "Buy_atMatch" ~ "During Match",
+                                                mer_buy_store == "Buy_atStore" ~ "At Store",
+                                                TRUE ~ "Neutral"),
+         mer_buy_pref = as.factor(mer_buy_pref),
+         mer_purchase_sponsors = case_when(Purchs1 == "Yes" ~ "Carter Subaru",
+                              Purchs2 == "Yes" ~ "Microsoft",
+                              Purchs3 == "Yes" ~ "Pepsi",
+                              Purchs4 == "Yes" ~ "BECU",
+                              Purchs9 == "Yes" ~ "Kraken Congee",
+                              Purchs10 == "Yes" ~ "Ruffneck Scarves",
+                              TRUE ~ "Not sure"),
+         mer_purchase_sponsors = as.factor(mer_purchase_sponsors),
+         mer_reign = case_when(Shirt1 == 1 ~ "Short_Sleeve_Shirt",                                                                                      Shirt2 == 1 ~ "Long_Sleeve_Shirt",
+                              Shirt3 == 1 ~ "Jackets",
+                              Shirt4 == 1 ~ "Accessories",
+                              TRUE ~ "No preferences"
+                              ),
+         mer_reign = as.factor(mer_reign),
+         dem_gender = as.factor(Gender),
+         dem_sexualOrient = as.factor(SexOrient),
+         dem_race = as.factor(Race),
+         att_seaEvent = case_when(SeaEvnt1 == 1 ~ "Seattle Storm",
+                              SeaEvnt2 == 1 ~ "Seattle Seahawks",
+                              SeaEvnt3 == 1 ~ "Seattle Sounders",
+                              SeaEvnt4 == 1 ~ "Seattle Mariners",
+                              SeaEvnt6 == 1 ~ "Sounders Women",
+                              SeaEvnt7 == 1 ~ "Seattle Majestics",
+                              SeaEvnt8 == 1 ~ "Tacoma Stars",
+                              SeaEvnt9 == 1 ~ "Rat City Rollergirls",
+                              TRUE ~ "NoAnswer"),
+         att_seaEvent = as.factor(att_seaEvent),
+         dem_marital_status = (Marital),
+         dem_education = (Educat),
+         sat_price_food = case_when(str_detect(Consat4,"Very Satisfied") ~ "S",
+                                      str_detect(Consat4,"Very Dissatisfied") ~ "D",
+                                      TRUE ~ "N"),
+         sat_quality = case_when(str_detect(Consat1,"Very Satisfied") ~ "S",
+                                      str_detect(Consat1,"Very Dissatisfied") ~ "D",
+                                      TRUE ~ "N"),
+         sat_variety = case_when(str_detect(Consat2,"Very Satisfied") ~ "S",
+                                      str_detect(Consat2,"Very Dissatisfied") ~ "D",
+                                      TRUE ~ "N"),
+         sat_price_drink = case_when(str_detect(Consat5,"Very Satisfied") ~ "S",
+                                      str_detect(Consat5,"Very Dissatisfied") ~ "D",
+                                      TRUE ~ "N"),
+         sat_beer = case_when(str_detect(Beersat1,"Very Satisfied") ~ "S",
+                                      str_detect(Beersat1,"Very Dissatisfied") ~ "D",
+                                      TRUE ~ "N"),
+         sat_gameday = case_when(sat_price_food == "S" ~ "Satisfactory food price",
+                                      sat_quality == "S" ~ "Satisfactory quality",
+                                      sat_price_drink == "S" ~ "Satisfactory drink price",
+                                      sat_variety == "S" ~ "Satisfied with variety",
+                                      sat_beer == "S" ~ "Satisfactory beer service",
+                                      sat_price_food == "D" ~ "Dissatisfying food price",
+                                      sat_quality == "D" ~ "Dissatisfying quality",
+                                      sat_price_drink == "D" ~ "Dissatisfying drink price",
+                                      sat_variety == "D" ~ "Dissatisfied with variety",
+                                      sat_beer == "D" ~ "Dissatisfying beer service",
+                              TRUE ~ "Neutral"),
+         cost1 = case_when(str_detect(Cost3,"Agree") ~ "A",
+                                      str_detect(Cost3,"Disagree") ~ "D",
+                                      str_detect(Cost3,"Somewhat disagree") ~ "D",
+                                      str_detect(Cost3,"Somewhat agree") ~ "A",
+                                      str_detect(Cost3,"Strongly agree") ~ "A",
+                                      str_detect(Cost3,"Strongly Disagree") ~ "D",
+                                      TRUE ~ "N"),
+         cost = if_else(cost1 == "A", "Costly", "Not Costly"),
+         cost = as.factor(cost),
+         sat_gameday = as.factor(sat_gameday),
+         sat_skill = case_when(str_detect(Skill2,"Agree") ~ "A",
+                                      str_detect(Skill2,"Disagree") ~ "D",
+                                      str_detect(Skill2,"Somewhat disagree") ~ "D",
+                                      str_detect(Skill2,"Somewhat agree") ~ "A",
+                                      str_detect(Skill2,"Strongly agree") ~ "A",
+                                      str_detect(Skill2,"Strongly Disagree") ~ "D",
+                                      TRUE ~ "N"), 
+          sat_success = case_when(str_detect(Success2,"Agree") ~ "A",
+                                      str_detect(Success2,"Disagree") ~ "D",
+                                      str_detect(Success2,"Somewhat disagree") ~ "D",
+                                      str_detect(Success2,"Somewhat agree") ~ "A",
+                                      str_detect(Success2,"Strongly agree") ~ "A",
+                                      str_detect(Success2,"Strongly Disagree") ~ "D",
+                                      TRUE ~ "N"), 
+          sat_drama = case_when(str_detect(Drama4,"Agree") ~ "A",
+                                      str_detect(Drama4,"Disagree") ~ "D",
+                                      str_detect(Drama4,"Somewhat disagree") ~ "D",
+                                      str_detect(Drama4,"Somewhat agree") ~ "A",
+                                      str_detect(Drama4,"Strongly agree") ~ "A",
+                                      str_detect(Drama4,"Strongly Disagree") ~ "D",
+                                      TRUE ~ "N"),
+          sat_cost = case_when(str_detect(Cost3,"Agree") ~ "A",
+                                      str_detect(Cost3,"Disagree") ~ "D",
+                                      str_detect(Cost3,"Somewhat disagree") ~ "D",
+                                      str_detect(Cost3,"Somewhat agree") ~ "A",
+                                      str_detect(Cost3,"Strongly agree") ~ "A",
+                                      str_detect(Cost3,"Strongly Disagree") ~ "D",
+                                      TRUE ~ "N"),
+          satisfacn_perf = case_when(sat_skill == "A" ~ "Satisfied_with_skill",
+                                      sat_success == "A" ~ "Satisfied_with_success",
+                                      sat_drama == "A" ~ "Satisfied_with_drama",
+                                      sat_cost == "A" ~ "Satisfied_with_cost",
+                                      sat_skill == "D" ~ "Not Satisfied_skill",
+                                      sat_success == "D" ~ "TNot Satisfied_success",
+                                      sat_drama == "D" ~ "Not Satisfied_drama",
+                                      sat_cost == "D" ~ "Not Satisfied_cost",
+                              TRUE ~ "Not Satisfied"),
+          satisfacn_perf = as.factor(satisfacn_perf)
+          
+  
+           ) %>%
+  filter(att_distance != "NA") %>%
+  filter(sales_numofmatch_2017 != "NA")  %>% 
+  filter(media_season_tv != "NA") %>%
+  filter(media_season_newspaper != "NA") %>%
+  #filter(media_ads!= "NA")  %>%
+  filter(SpndlstS != "NA") %>%
+  filter(SpndlstO != "NA") %>%
+  rename(sales_exp_self2016 = SpndlstS, 
+         sales_exp_oth2016 = SpndlstO) %>%
+  select(factor1_attend,att_first_attend,att_interest,att_gamewith,att_travel_mode,att_distance,
+         att_promo_effect,att_player_fan,att_seaEvent, att_most_pref_time,
+         att_least_preferred_timing,att_attend_2017,att_attend_2016, att_gamewith,
+         sales_ticket_type, sales_exp_self2016, 
+         sales_exp_oth2016,sales_numofmatch_2017,sales_tkt_type_2017,media_web,
+         media_season_newspaper,media_season_tv,
+         mer_buy_pref,cost,
+         mer_purchase_sponsors,mer_reign,dem_gender,dem_sexualOrient,dem_marital_status,
+         dem_education,sat_gameday,satisfacn_perf)  %>%
+  drop_na()
+
+#Examine the first 10 observations to make sure data set looks ok
+#head(seattle_reign,10)
+
+# Descriptive statistics
+#summary(seattle_reign)
+
+# Review data structures
+#str(seattle_reign)
+
+# The palette with grey:
+cbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+```
+
+#####Observations
+
+- Data for the Seattle Reign FC Soccer Team
+- 416 observations of 23 variables 
+- 17 Factor Variables
+- 5 Integer Variable
+- 1 Numeric Variables
+
+Selecting relevant columns  
+===========================
+
+```{r}
+# Select required columns from raw data
+sea_reign_data <- seattle_reign %>%
+   select(att_first_attend,att_interest,att_distance,
+         att_promo_effect,att_seaEvent, att_most_pref_time,
+         att_attend_2017,att_attend_2016,att_gamewith,
+         sales_ticket_type, sales_exp_self2016, 
+         sales_exp_oth2016,sales_numofmatch_2017,sales_tkt_type_2017,
+         media_web,cost,
+         media_season_newspaper,media_season_tv,
+         mer_buy_pref,
+         mer_purchase_sponsors,mer_reign,dem_gender,dem_sexualOrient,dem_marital_status,
+         dem_education,sat_gameday,satisfacn_perf)
+
+
+summary(sea_reign_data)
+```
+
+*Ask questions to follow up on in detailed EDA*  
+1. How do the attendance vary when people travelled longer distance to watch the match?  
+2. How do the attendance vary when people attended a previous match and when they have not?  
+3. How does media such as website, facebook effect the number of people who are likely to attend a match in 2017?
+4. What is the purchasing habits of people who have attended previous matches?
+5. How is the overall game day experience of people who have attended the matches in past?
+6. What is the impact of sponsors in selling the merchandise at store vs online vs during match?
+
+ 
+
+
+```{r}
+# Selecting relevant columns for flexdashboard
+
+sea_flexdash <- sea_reign_data %>%
+   select(att_promo_effect, att_most_pref_time,sales_exp_self2016, att_attend_2016,
+         sales_exp_oth2016,sales_numofmatch_2017,sales_tkt_type_2017,mer_buy_pref,
+         att_attend_2017, mer_reign,dem_gender,dem_education)
+
+write.csv(sea_flexdash, "/Users/LoveHonu/Documents/Winter2019/BUAN5210-Visualization/sea_flexdash.csv")
+ 
+summary(sea_flexdash)
+```
+
+1. Univariate non-graphical - Categorical 
+=========================================
+
+- Categorical data - tabulation
+
+#Factor1 Attendance
+
+##Attendance_Past_Years
+
+```{r}
+
+attendance_first <- sea_reign_data %>%  # %>% Pipes data to group_by() function
+  group_by(att_first_attend) %>%           # group_by() organises data by region
+  summarise(count = n(),                        # count is the new variable name, n() is a counting function
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, # percent is a new variable, sum() and nrow() are functions
+      avg_distance = mean(att_distance))             # mean distance travelled
+attendance_first
+```
+
+- 2013 attendance is highest
+
+##Attendance_Interest 
+
+```{r}
+
+attendance_interest <- sea_reign_data %>% 
+  group_by(att_interest) %>%         
+  summarise(count = n(),        
+                               
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, # percent is a new variable, sum() and nrow() are functions
+      avg_distance = mean(att_distance))                        # mean distance travelled
+attendance_interest
+```
+
+##Attendance_Local_Event
+
+```{r}
+
+# group_by() brand name
+attendance_local_event <- sea_reign_data %>% 
+  group_by(att_seaEvent) %>%           # group_by() organises data by producer
+  summarise(count = n(),       
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, # percent is a new variable, sum() and nrow() are functions
+      avg_distance = mean(att_distance))                        # mean distance travelled
+attendance_local_event
+```
+
+##Attendance_Promo_Effect
+
+```{r}
+# group_by() ad
+attendance_promo_effect <- sea_reign_data %>% 
+  group_by(att_promo_effect) %>%           # group_by() organises data by producer
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, # percent is a new variable, sum() and nrow() are functions
+      avg_distance = mean(att_distance))                        # mean distance travelled
+attendance_promo_effect
+```
+
+##Attendance_2017 
+
+```{r}
+
+# group_by() ad
+attendance_2017 <- sea_reign_data %>% 
+  group_by(att_attend_2017) %>%           
+  summarise(count = n(),      
+      percent = (sum(count) / nrow(sea_reign_data)) * 100,
+      avg_distance = mean(att_distance))                      
+attendance_2017
+```
+
+
+##Attendance_Pref_Timing 
+
+```{r}
+# group_by() ad
+attendance_timing <- sea_reign_data %>%  
+  group_by(att_most_pref_time) %>%          
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, 
+      avg_distance = mean(att_distance))                       
+attendance_timing
+```
+
+#Factor2-Sales
+
+##Sales_Ticket_Type
+
+```{r}
+
+sales_ticket_type <- sea_reign_data %>%  
+  group_by(sales_ticket_type) %>%           # group_by() organises data 
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, 
+       avg_exp_self = mean(sales_exp_self2016),                        # mean distance travelled
+       avg_exp_others = mean(sales_exp_oth2016))                        # mean distance travelled
+      # count_match_2016 = sum(att_first_attend_2016))                        # mean distance travelled
+sales_ticket_type
+```
+
+```{r}
+
+sales_ticket_type_2017 <- sea_reign_data %>%  
+  group_by(sales_tkt_type_2017) %>%           # group_by() organises data by ticket type
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, 
+       avg_exp_self = mean(sales_exp_self2016),                     
+       avg_exp_others = mean(sales_exp_oth2016),    # mean expenditure
+       numberofmatch_2017 = sum(sales_numofmatch_2017))   # mean of num of matches
+sales_ticket_type_2017
+```
+
+
+##Media_Web
+
+```{r}
+
+media_web <- sea_reign_data %>%  
+  group_by(media_web) %>%           # group_by() organises data by web media used
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, 
+       numberofmatch_2017 = sum(sales_numofmatch_2017))                        # mean of num of matches
+media_web
+```
+
+##Merchandise_Purchase_Sponsors
+
+```{r}
+
+merchandise_sponsors <- sea_reign_data %>%  
+  group_by(mer_purchase_sponsors) %>%           # group_by() organises data by web media used
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, 
+       numberofmatch_2017 = sum(sales_numofmatch_2017))                        # mean of num of matches
+merchandise_sponsors
+```
+
+##Merchandise_ReignFC
+
+```{r}
+
+merchandise_reign <- sea_reign_data %>%  
+  group_by(mer_reign) %>%           # group_by() organises data by web media used
+  summarise(count = n(),        
+      percent = (sum(count) / nrow(sea_reign_data)) * 100, 
+       numberofmatch_2017 = sum(sales_numofmatch_2017))                        # mean of num of matches
+merchandise_reign
+```
+
+2. Univariate graphical  - Categorical
+=========================================
+
+##Attendance past years Seattle FC Reign match
+
+
+```{r}
+# Code histograms using grid.arrange to see quant variables together group by when first attended a Seattle Reign FC match
+grid.arrange(
+  
+  sea_reign_data %>% 
+    ggplot(aes(x = att_first_attend, y = att_distance)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_first_attend, y = media_season_newspaper)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_first_attend, y = media_season_tv)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_first_attend, y = sales_numofmatch_2017)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  ncol = 2
+)
+```
+
+- People who first attended a Seattle Reign FC match, travelled maximum distance of 2000 miles in 2015, declined in 2016
+- In 2013, approximately 180 times per week during the season people read about the Reign in the newspaper who attended match 
+- In 2015, approximately 280 times during the season people watch the Reign on TV who attended match, only 60 times in 2016
+- People who have attended a 2016 match, are least likely to attend a match in 2017
+
+##Attendance local event
+
+
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together group by local events attendance
+grid.arrange(
+  
+  sea_reign_data %>% 
+    ggplot(aes(x = att_seaEvent, y = att_distance)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_seaEvent, y = media_season_newspaper)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_seaEvent, y = media_season_tv)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_seaEvent, y = sales_numofmatch_2017)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  ncol = 2
+)
+```
+
+- People who follow Seattle Sounders, are more likely to attend the Seattle Reign FC match in 2017
+
+##Attendance preferred timings
+
+
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together group by most preferred timings
+grid.arrange(
+  
+  sea_reign_data %>% 
+    ggplot(aes(x = att_most_pref_time, y = att_distance)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+
+  sea_reign_data %>% 
+    ggplot(aes(x = att_most_pref_time, y = sales_numofmatch_2017)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  ncol = 2
+)
+```
+
+- People who are likely to attend matches in 2017 prefer a game on Sunday Evenings
+
+## Attendance Ticket Type
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together group by ticket type
+grid.arrange(
+  sea_reign_data %>% 
+    ggplot(aes(x = sales_ticket_type, y = att_distance)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = sales_ticket_type, y = media_season_newspaper)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = sales_ticket_type, y = media_season_tv)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = sales_ticket_type, y = sales_numofmatch_2017)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  ncol = 2
+)
+```
+
+- People who are travelling maximum distances are more likely to buy single match tickets
+- People who are more likely to attend Season 2017, prefer to buy Season Ticket 
+
+##Media advertisements
+
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together group by advertisements
+
+grid.arrange(
+  sea_reign_data %>% 
+    ggplot(aes(x = media_web, y = att_distance)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = media_web, y = media_season_newspaper)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = media_web, y = media_season_tv)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = media_web, y = sales_numofmatch_2017)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  ncol = 2
+)
+```
+
+-  Clearly, website is the most popular media, facebook is second
+
+##Merchandise Buying Preferences
+
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together group by buying preferences
+
+grid.arrange(
+  sea_reign_data %>% 
+    ggplot(aes(x = mer_buy_pref, y = sales_exp_self2016)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  sea_reign_data %>% 
+    ggplot(aes(x = mer_buy_pref, y = sales_exp_oth2016)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+    sea_reign_data %>% 
+    ggplot(aes(x = mer_buy_pref, y = sales_numofmatch_2017)) +
+      geom_bar(stat = "identity") +
+      coord_flip(),
+  ncol = 2
+)
+```
+
+- In the year 2016, most people spend on self and others by Online merchandise purchases 
+  - Second preference was expenditure during the match
+- People who are likely to attend the match in 2017, have a buying preference of Online as maximum
+
+3. Univariate non-graphical – Quantitative
+=========================================
+
+```{r}
+# Descriptive statistics
+summary(sea_reign_data)
+```
+
+4. Univariate graphical  - Quantitative
+=========================================
+
+##Histograms
+
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together
+
+
+grid.arrange(
+  sea_reign_data %>% 
+    ggplot(aes(att_distance)) +
+      geom_histogram(),
+  sea_reign_data %>% 
+    ggplot(aes(sales_numofmatch_2017)) +
+      geom_histogram(),
+  sea_reign_data %>% 
+    ggplot(aes(sales_exp_self2016)) +
+      geom_histogram(),
+  sea_reign_data %>% 
+    ggplot(aes(sales_exp_oth2016)) +
+      geom_histogram(),
+  
+  ncol = 2
+)
+
+```
+- Maximum count is for least distance travelled people who are attending the match
+- Maximum count is 0 for expenditure for self, very few have higher expenses
+
+
+##Boxplots
+
+```{r}
+
+# Set grid pattern for graph arrangement
+par(mfrow = c(2, 2))
+boxplot(sea_reign_data$att_distance, main = "Attendance_distance_travelled")
+boxplot(sea_reign_data$sales_numofmatch_2017, main = "Sales_NumberOfMatches")
+boxplot(sea_reign_data$sales_exp_self2016, main = "Sales_Expenditure_Self2016")
+boxplot(sea_reign_data$sales_exp_oth2016, main = "Sales_Expenditure_Others2016")
+```
+
+
+5. Multivariate non-graphical - Categorical
+=============================================
+
+##Crosstabs
+Cross-tabs are used for tabulation of categorical variables
+
+```{r}
+addmargins(xtabs(~ att_first_attend + att_interest, data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ att_first_attend + att_promo_effect, data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ att_first_attend + att_most_pref_time,  data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ sales_numofmatch_2017 + media_web,  data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ sales_numofmatch_2017 + mer_buy_pref,  data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ sales_numofmatch_2017 + mer_purchase_sponsors,  data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ sales_numofmatch_2017 + dem_gender,  data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ sales_numofmatch_2017 + dem_marital_status,  data = sea_reign_data))
+```
+
+```{r}
+addmargins(xtabs(~ sales_numofmatch_2017 + dem_education,  data = sea_reign_data))
+```
+
+#####Observations
+
+- With 249 people attending match, Sunday evenings is most favorite, attendance decreased from 82 to 45 in 2016 
+- People who are likely to attend 2017 match, following Seattle FC Reign on website
+- Maximum people who are likely to attend a 2017 match prefer to purchase Online
+- Most popular sponsor among people likely to attend a 2017 match prefer Microsoft as a sponsor
+- Most popular merchandise among people likely to attend a 2017 match is short sleeve shirt
+- Female fans and married people are more in numbers than male fans and single who are going to attend a 2017 match
+- Someone with a bachelor or graduate degree are interested in watching 2017 match
+
+##Proportion Cross Tab
+
+```{r}
+# Proportions might be more informative
+addmargins(round(prop.table(xtabs(~ att_first_attend + att_interest,  data = sea_reign_data)), 3))
+```
+
+6. Multi-variate graphical - Categorical
+=========================================
+
+**Use tile plot to show multivariate categorical**
+
+
+```{r}
+# Note have to calculate and provide a variable for filling the graph
+
+sea_reign_data %>%
+  group_by(att_most_pref_time, att_attend_2016) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(att_most_pref_time, att_attend_2016)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(aes(fill = -count))
+
+sea_reign_data %>%
+  group_by(sales_tkt_type_2017, att_attend_2017) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(sales_tkt_type_2017, att_attend_2017)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(aes(fill = -count))
+
+sea_reign_data %>%
+  group_by(media_web, att_attend_2017) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(media_web, att_attend_2017)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(aes(fill = -count))
+
+sea_reign_data %>%
+  group_by(mer_buy_pref, att_attend_2016) %>% 
+  summarise(count = n()) %>% 
+  ggplot(aes(mer_buy_pref, att_attend_2016)) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(aes(fill = -count))
+```
+
+- Sunday evenings is most popular timing
+- Single matches and seasonal tickets are most likely to sell
+
+7. Multivariate non-graphical - Quantitative
+============================================
+##Correlations plots  
+
+```{r}
+
+# Use ggpairs from the GGally package
+cor_plot <- sea_reign_data %>%
+  select(att_distance,sales_exp_self2016,sales_numofmatch_2017)   
+
+cor(cor_plot)
+```
+
+
+- People who are likely to attend certain number of matches in 2017 and dollar amount people have spent over the (2016) season on Seattle Reign FC merchandise and swag (not food) for self are positively correlated (34.2%)
+
+
+8. Multivariate graphical - Quantitative
+========================================
+
+## Correlations pariwise plot
+
+```{r}
+# Pairwise plot
+
+pairs_plot <- sea_reign_data %>%
+  select(att_distance,sales_exp_self2016,sales_numofmatch_2017)
+
+pairs_plot %>%
+  ggpairs()
+
+pairs.panels(pairs_plot)
+
+```
+  
+##### Observations of the data 
+
+**With more people likely to attend a 2017 matches, there are chances that people might spend more on merchandise as in 2016**
+
+
+```{r}
+# Standard scatter plot to visualize what is the revenue when producers receive maximum promos and ads
+
+grid.arrange(
+  sea_reign_data %>% 
+    ggplot(aes(x = att_attend_2016, y = sales_numofmatch_2017, color = dem_gender)) +
+    geom_point() + 
+    geom_jitter() +
+    geom_smooth(method = "lm", se = FALSE),
+  sea_reign_data %>% 
+    ggplot(aes(x = att_attend_2017, y = sales_numofmatch_2017, color = dem_gender)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_point() +
+    geom_jitter() +
+    scale_fill_brewer(palette = "Reds") +
+    geom_smooth(method = "lm", se = FALSE),
+    
+  ncol = 2
+)
+```
+
+
+- Female have attended more matches in the past, in 2017 females are likely to attend more as well
+
+9. Multivariate non-graphical - Categorical and Quantitative 
+============================================================
+
+```{r}
+# Form table of medians 
+# Attendance when 2016 = 1 
+attendance_2016 <- sea_reign_data %>%
+  group_by(mer_buy_pref, dem_gender) %>%
+  filter(att_attend_2016 == 1) %>%
+  summarise(Sum_distance = mean(att_distance)) %>%
+  spread(dem_gender, Sum_distance) %>%
+  as.data.frame()
+
+attendance_2016
+
+```
+
+- Observation when attended match in 2016 = 1
+- Female who has attended a 2016 match and has a buying preference at store travelled approximately 18.6 miles to see the match
+
+
+10. Multivariate non-graphical - Categorical and Quantitative 
+=============================================================
+
+##Part1 - Clustered barplots across attendance, media and merchandise
+
+###1. Across Merchandise
+
+**Clustered barplot to compare distance travelled, expenditure on self, number of matches attending in 2017 across Merchandise**
+
+
+```{r}
+
+# First get the data and name the graph so we can build it by layer
+merchandise_data1 <- sea_reign_data %>%
+  select(att_distance,mer_buy_pref) %>% 
+  group_by(mer_buy_pref) %>%                      # Group_by is by factor level, so group by attendance
+  summarise_all(funs(mean)) %>%             # Take the mean of all remaining columns so we can graph them
+  gather("Variable", "Mean", -(mer_buy_pref))     # gather is used to reshape the data, make a bar graph by "Variable"
+
+merchandise_data2 <- sea_reign_data %>%
+  select(sales_exp_self2016,mer_buy_pref) %>% 
+  group_by(mer_buy_pref) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(mer_buy_pref))
+
+merchandise_data3 <- sea_reign_data %>%
+  select(sales_exp_oth2016,mer_buy_pref) %>% 
+  group_by(mer_buy_pref) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(mer_buy_pref))
+
+merchandise_data4 <- sea_reign_data %>%
+  select(sales_numofmatch_2017,mer_buy_pref) %>% 
+  group_by(mer_buy_pref) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(mer_buy_pref))
+
+merchandise_data5 <- sea_reign_data %>%
+  select(att_distance,sales_exp_self2016,sales_numofmatch_2017,mer_buy_pref) %>% 
+  group_by(mer_buy_pref) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(mer_buy_pref))
+
+merchandise_data1
+merchandise_data2
+merchandise_data3
+merchandise_data4
+
+```
+
+```{r}
+# Now set frame for plot, notice new variables "Variable" and "Mean"
+grid.arrange(
+merchandise_plot1 <- merchandise_data1 %>%  
+  ggplot(aes(x = Variable, y = Mean, fill = mer_buy_pref)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"), # Set stat and position to get side-by-side bar
+
+merchandise_plot2 <- merchandise_data2 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = mer_buy_pref)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"),
+
+merchandise_plot3 <- merchandise_data3 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = mer_buy_pref)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"),
+
+merchandise_plot4 <- merchandise_data4 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = mer_buy_pref)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"))
+
+merchandise_plot5 <- merchandise_data5 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = mer_buy_pref)) +
+    geom_bar(stat = "identity", position = "dodge")
+
+```
+
+#### Observations 
+
+- People who have spent most on self in 2016 season are most likely to purchase merchandise at stores
+- People who are planning to attend a match in 2017 are most likely to purchase merchandise at stores
+
+
+### 2. Across Media
+
+**Clustered barplot to compare distance travelled, expenditure on self, number of matches attending in 2017 for Media**
+
+```{r}
+
+media_data1 <- sea_reign_data %>%
+  select(att_distance,media_web) %>% 
+  group_by(media_web) %>%                      # Group_by is by factor level, so group by media
+  summarise_all(funs(mean)) %>%             # Take the mean of all remaining columns so we can graph them
+  gather("Variable", "Mean", -(media_web))     # gather is used to reshape the data, make a bar graph by "Variable"
+
+media_data2 <- sea_reign_data %>%
+  select(sales_exp_self2016,media_web) %>% 
+  group_by(media_web) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(media_web))
+
+media_data3 <- sea_reign_data %>%
+  select(sales_exp_oth2016,media_web) %>% 
+  group_by(media_web) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(media_web))
+
+media_data4 <- sea_reign_data %>%
+  select(sales_numofmatch_2017,media_web) %>% 
+  group_by(media_web) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(media_web))
+
+media_data5 <- sea_reign_data %>%
+  select(att_distance,sales_exp_self2016,sales_numofmatch_2017,media_web) %>% 
+  group_by(media_web) %>% 
+  summarise_all(funs(mean)) %>% 
+  gather("Variable", "Mean", -(media_web))
+
+
+media_data1
+media_data2
+media_data3
+media_data4
+
+
+```
+
+```{r}
+# Set frame for plot, notice new variables "Variable" and "Mean"
+
+grid.arrange(
+media_plot1 <- media_data1 %>%  
+  ggplot(aes(x = Variable, y = Mean, fill = media_web)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"), # Set stat and position to get side-by-side bar
+
+media_plot2 <- media_data2 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = media_web)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"),
+
+media_plot3 <- media_data3 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = media_web)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"),
+
+media_plot4 <- media_data4 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = media_web)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+    geom_bar(stat = "identity", position = "dodge"))
+
+media_plot5 <- media_data5 %>% 
+  ggplot(aes(x = Variable, y = Mean, fill = media_web)) +
+    geom_bar(stat = "identity", position = "dodge")
+
+```
+
+#### Observations
+
+- People who follow Reign on Instagram are travelling maximum distance to attend the game
+_ People who did maximum expenditure in season 2016, follow Reigns on Twitter
+- People who are likely to attend season 2017, follow Reigns on Instagram
+
+##Part2 - Clustered barplot with professional graphs
+
+Lets add a title and some bar text  
+
+```{r}
+      # Add labels to each bar
+merchandise_plot <- merchandise_plot5 + geom_text(aes(label = round(Mean, 1)), vjust = -0.5, color = "black",
+            position = position_dodge(.9), size = 4) +
+      # Add a main title
+    ggtitle("Comparison of distance,expenditure and matches in 2017 by buying preference",
+    subtitle = "Highest mean expenditure on self in 2016 season is at store\nHighest mean distance travelled to purchase merchandise in store") +
+    scale_fill_brewer(palette = "PuBuGn") +
+    theme(axis.ticks.x = element_blank(), # Use theme to clean up the graph to make more professional
+          axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          panel.background = element_blank())
+
+# Call the graph
+merchandise_plot
+```
+
+
+```{r}
+      # Add labels to each bar
+media_plot <- media_plot5 + geom_text(aes(label = round(Mean, 1)), vjust = -0.5, color = "black",
+            position = position_dodge(.9), size = 3) +
+      # Add a main title
+    ggtitle("Comparison of distance,expenditure and matches in 2017 by buying preference",
+    subtitle = "Highest mean expenditure on self in 2016 season is at store\nHighest mean distance travelled to purchase merchandise in store") +
+    scale_fill_brewer(palette = "PuBuGn") +
+    theme(axis.ticks.x = element_blank(), # Use theme to clean up the graph to make more professional
+          axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          panel.background = element_blank())
+
+# Call the graph
+media_plot
+```
+
+
+##Part3 - Bar plots
+
+
+## a. Factors that have impact on attendance?
+
+```{r}
+# Doing a subset of the table to just show variables of interest
+timings_subset <- c("Wed Evenings", "Sunday Evenings","Sunday Afternoons 4pm","Friday Evenings", "Saturday Evenings", 
+                    "Saturday Afternoons 4pm", "Saturday Afternoons 4pm","Saturday Afternoons 1pm")
+
+past_year_attendance <- sea_reign_data %>%
+  filter(att_most_pref_time %in% timings_subset)
+
+attendance_plot <- past_year_attendance %>%
+  group_by(att_most_pref_time, att_first_attend) %>%
+  summarize(avg_distance = mean(att_distance)) 
+  ggplot(data = attendance_plot, aes(x = reorder(att_most_pref_time, avg_distance), y = avg_distance , 
+                                       fill = att_first_attend)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+  geom_bar(stat="identity", position="dodge") +
+  coord_flip()
+```
+ 
+## b. Factors that have impact on attendance like timings of the match?
+
+```{r}
+# Doing a subset of the table to just show variables of interest
+timings_subset <- c("Wed Evenings", "Sunday Evenings","Sunday Afternoons 4pm","Friday Evenings", "Saturday Evenings", 
+                    "Saturday Afternoons 4pm", "Saturday Afternoons 4pm","Saturday Afternoons 1pm")
+
+next_year_attendance <- sea_reign_data %>%
+  #filter(att_attend_2017 %in% attend_2017_subset) %>%
+  filter(att_most_pref_time %in% timings_subset)
+
+attendance_plot1 <- next_year_attendance %>%
+  group_by(att_most_pref_time, att_attend_2017) %>%
+  summarize(avg_distance = mean(att_distance)) 
+  ggplot(data = attendance_plot1, aes(x = reorder(att_most_pref_time, avg_distance), y = avg_distance , 
+                                       fill = att_attend_2017)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+  geom_bar(stat="identity", position="dodge") +
+  coord_flip()
+```
+
+## c. Factors that have impact on attendance audiences like to watch the gamewith?
+
+```{r}
+# Doing a subset of the table to just show variables of interest
+gamewith_subset <- c("3 Match Pack","Single Match","I don't know","5 Match Pack","Season Ticket")
+
+ticket_type <- sea_reign_data %>%
+  filter(sales_ticket_type %in% gamewith_subset)
+
+attendance_plot2 <- ticket_type %>%
+  group_by(sales_ticket_type,att_gamewith) %>%
+  summarize(avg_distance = mean(att_distance)) 
+  ggplot(data = attendance_plot2, aes(x = reorder(sales_ticket_type, avg_distance), y = avg_distance , 
+                                       fill = att_gamewith)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+  geom_bar(stat="identity", position="dodge") +
+  coord_flip()
+```
+
+##d. How much did people spent on merchandise on self and others if they attended a match in 2016?
+
+```{r echo=FALSE, message= FALSE}
+# Doing a subset of the table to just show variables of interest
+mer_subset <- c("At Store","During Match","Online")
+
+merc_pref <- sea_reign_data %>%
+  filter(mer_buy_pref %in% mer_subset)
+# We want to analyze if more units are purchased if price per packages are lower 
+# We can analyze this by plotting price (price per package) by units bought
+
+attend_labels <- c("0" = "Not attended 2016", "1" = "Attended 2016")
+sales_plot <- 
+merc_pref %>%
+  ggplot((aes(x = sales_exp_self2016, y = att_distance, col= mer_buy_pref)))+ 
+  geom_smooth(method=lm, se=FALSE) +   # Add linear regression line
+  facet_grid(.~ att_attend_2016, labeller = labeller(att_attend_2016 = attend_labels)) +
+  ggtitle("Merchandise buying preferences for people who attended 2016 season", 
+  sub = "Fans from ") +
+  labs(x = "Prices (USD) under promo setting", 
+       y = "Units sold at given price",
+       col = "Producers") + 
+  theme_bw() +
+  scale_fill_brewer(palette = "PuBuGn") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.ticks = element_blank())
+
+
+sales_plot
+
+
+```
+##e. Merchandise preferences ?
+
+
+```{r}
+# Doing a subset of the table to just show variables of interest
+timings_subset <- c("Wed Evenings", "Sunday Evenings","Sunday Afternoons 4pm","Friday Evenings", "Saturday Evenings", 
+                    "Saturday Afternoons 4pm", "Saturday Afternoons 4pm","Saturday Afternoons 1pm")
+
+attend_2017_subset <- c("Attend_2017","Neutral")
+
+next_year_attendance <- sea_reign_data %>%
+  filter(att_attend_2017 %in% attend_2017_subset) %>%
+  filter(att_most_pref_time %in% timings_subset)
+
+merchandise_plot <- sea_reign_data %>%
+  group_by(mer_reign, mer_buy_pref) %>%
+  summarize(avg_expenditure = mean(sales_exp_self2016)) 
+  ggplot(data = merchandise_plot, aes(x = reorder(mer_reign, avg_expenditure), y = avg_expenditure , 
+                                       fill = mer_buy_pref)) +
+  scale_fill_brewer(palette = "PuBuGn") +
+  geom_bar(stat="identity", position="dodge") +
+  coord_flip()
+```
+
+Research Questions
+==================
+
+##Question 1: Understand the merchandise buying preferences and average expenditure over the 2016 season for people who have attended 2016 season.
+
+##1. First examine the buying preferences of people who have attended the match in 2016 season
+
+```{r}
+mer_subset <- c("During Match","Online","At Store")
+mer_reign_subset <- c("Short_Sleeve_Shirt","Long_Sleeve_Shirt","Accessories","Jackets")
+
+merchandise <- sea_reign_data %>%
+  filter(mer_buy_pref %in% mer_subset) %>%
+  filter(mer_reign %in% mer_reign_subset)
+
+merchandise %>% 
+  filter(att_attend_2016 == 1) %>%
+  group_by(mer_buy_pref) %>% 
+  summarise(Count = n(),
+  Average_Expenditure_Self = mean(sales_exp_self2016),
+  Average_Expenditure_Others = mean(sales_exp_oth2016)) %>%
+  arrange(desc(Average_Expenditure_Self)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  row_spec(1, background = "#e5f5e0")
+```
+
+**Null Hypothesis: Average expedinture is same across all merchandise for people who attended season 2016**
+
+```{r}
+sea_hyp1 <- merchandise %>%
+  filter(att_attend_2016 == 1) 
+
+# Is expenditure the same across merchandises?
+t.test(sea_hyp1$sales_exp_self2016[sea_hyp1$mer_buy_pref == "During Match"], 
+       sea_hyp1$sales_exp_self2016[sea_hyp1$mer_buy_pref == "At Store"])
+```
+
+```{r}
+sea_hyp1 <- merchandise %>%
+  filter(att_attend_2016 == 1) 
+
+# Is expenditure the same across merchandises?
+t.test(sea_hyp1$sales_exp_self2016[sea_hyp1$mer_buy_pref == "During Match"], 
+       sea_hyp1$sales_exp_self2016[sea_hyp1$mer_buy_pref == "Online"])
+```
+
+```{r}
+#Graphing the Merchandise preferences and mean expenditure on self.
+# 90% CI, get z-value for upper tail, use .95 since is one sided
+z <- qnorm(.95)
+
+# Incorporate CI into bar graph of means
+sea_hyp1 %>%
+  group_by(mer_buy_pref) %>%
+  summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(mer_buy_pref,m), y = m)) +
+  geom_bar(stat = "identity", position = "dodge", fill = "#9ecae1") +
+  geom_errorbar(aes(ymin = m - ci, ymax = m + ci), 
+                width = 0.5, position = position_dodge(0.9)) +
+  theme_classic() +
+  xlab("") +
+  ylab("") +
+  scale_fill_brewer(palette = "PuBuGn") +
+  theme(axis.ticks.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.y = element_blank()) +
+  ggtitle("Merchandise preferences and mean expenditure on self",
+          subtitle = "Maximum expenditure during match")
+```
+
+- The expenditure graph above shows that the Merchandises are more likely to sell Online or during the Match
+
+
+##2. Examine merchandises that are popular and sell at store, online and during match with and without promos
+
+```{r}
+
+mer_reign_subset <- c("Short_Sleeve_Shirt","Long_Sleeve_Shirt","Accessories","Jackets")
+
+mer_t2 <- sea_reign_data %>%
+  filter(mer_reign %in% mer_reign_subset)
+
+sea_dm <- mer_t2 %>%
+  filter(mer_buy_pref == "During Match")
+
+#Create a table of General Mills cereals and their mean revenue when an in-store promotion is happening.
+merchandise_t2 <- sea_dm %>% 
+  filter(att_attend_2016 == 1) %>%
+  group_by(mer_reign) %>% 
+  summarise(Count = n(),
+  Average_Expenditure_Self = mean(sales_exp_self2016),
+  Average_Expenditure_Others = mean(sales_exp_oth2016)) %>%
+  arrange(desc(Average_Expenditure_Self)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  row_spec(1, background = "#fee0d2")
+
+merchandise_t2
+```
+
+**Null Hypothesis: Average expenditure on self is similar for promos and without promos across all merchandise**
+
+```{r}
+
+# Is expenditure the same whether running a promo or not?
+t.test(sea_dm$sales_exp_self2016[sea_dm$att_promo_effect == "No influence"], 
+       sea_dm$sales_exp_self2016[sea_dm$att_promo_effect != "No influence"])
+
+```
+
+```{r}
+
+# Is expenditure the same whether running a promo or not?
+t.test(sea_dm$sales_exp_oth2016[sea_dm$att_promo_effect == "No influence"], 
+       sea_dm$sales_exp_oth2016[sea_dm$att_promo_effect != "No influence"])
+
+```
+
+```{r}
+#Graphing mean promotional expenditure across Merchandise.
+# 90% CI, get z-value for upper tail, use .95 since is one sided
+z <- qnorm(.95)
+
+# Incorporate CI into bar graph of means
+mer_t2 %>%
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "Positive", "None")) %>%
+  filter(att_attend_2016 == 1) %>%
+ # mutate(gender = if_else(dem_gender == "Female", "Female", "Male")) %>%
+  group_by(mer_reign, promo) %>%
+  summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016)/20, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(mer_reign, m), y = m, fill = promo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = m - ci, ymax = m + ci), 
+                width = 0.5, position = position_dodge(0.9)) +
+  coord_flip() +
+  theme_classic() +
+  xlab("") +
+  labs(fill = "Promo") +
+  scale_fill_brewer() +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  ggtitle("Mean expenditure on self during match for Season 2016  ",
+          subtitle = "Promos are effective for short sleeve shirts\nand Accessories")
+```
+
+```{r}
+base_plot2 <- 
+mer_t2 %>%
+  
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "Positive", "None")) %>%
+  filter(att_attend_2016 == 1) %>%
+  group_by(mer_reign, promo) %>%
+  summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016)/20, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(mer_reign, m), y = m, fill = promo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 60),
+                     labels = dollar_format(prefix = "$")) +
+  theme_classic() +
+  xlab("") +
+  labs(fill = "Promo") +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.title = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        axis.line.x = element_line(colour = "grey"),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  scale_fill_brewer() +
+  ggtitle("Mean expenditure during match for Season 2016  ",
+          subtitle = "Promos are statistically effective for short sleeve shirts\nand Accessories")
+save.image("base_plot2.RData")
+base_plot2
+
+```
+   
+```{r}
+#Target brand
+
+baseplot3 <- 
+mer_t2 %>%
+  #mutate(gender = if_else(dem_gender == "Female", "Female", "Male")) %>%
+  mutate(sponsor = if_else(mer_purchase_sponsors == "BECU", "BECU", 
+                           if_else(mer_purchase_sponsors == "Microsoft", "MSFT",
+                                   if_else(mer_purchase_sponsors == "Pepsi", "Pepsi", "Others"))))%>%
+                                        
+  filter(att_attend_2016 == 1) %>%
+  group_by(mer_reign, sponsor) %>%
+  summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016)/20, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(mer_reign, m), y = m, fill = sponsor)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width=0.7) +
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 60),
+                     labels = dollar_format(prefix = "$")) +
+  theme_classic() +
+  xlab("") +
+  labs(fill = "Sponsors") +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.title = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        axis.line.x = element_line(colour = "grey"),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  scale_fill_brewer() +
+  ggtitle("Popular sponsors during Season 2016  ",
+          subtitle = "Pepsi is highest selling brand for Short Sleeve\nShirts and Jackets")
+save.image("baseplot3.RData")
+baseplot3
+
+```
+
+- As evident from the above graphs, Short Sleeve Shirts and Accessories sell most when promotions have positive influence 
+
+- Long Sleeve Shirts and Jackets are selling even if there is no influence of promotions which means it is important to focus on promotional strategy for products like Short Sleeve Shirts and Accessories  
+
+```{r}
+mer_subset <- c("During Match","Online","At Store")
+mer_reign_subset <- c("Short_Sleeve_Shirt","Long_Sleeve_Shirt","Accessories","Jackets")
+
+merchandise_t1 <- sea_reign_data %>%
+  filter(mer_buy_pref %in% mer_subset) %>%
+  filter(mer_reign %in% mer_reign_subset)
+
+gStore <- sea_hyp1 %>%
+    filter(mer_buy_pref == "At Store") %>%
+    filter(mer_reign != "Accessories") %>%
+    group_by(mer_buy_pref, mer_reign) %>%
+    summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+    ggplot(aes(x = reorder(mer_reign, m), y = m)) +
+    geom_bar(stat = "identity", position = "dodge", 
+             fill = "#deebf7") + 
+    coord_flip() +
+  scale_y_continuous(limits = c(0, 75)) + 
+    theme_classic() +
+    theme(axis.line.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title = element_blank(),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_blank()) +
+    ggtitle("Store") +
+  theme(plot.title = element_text(hjust = -0.08, 
+                                  vjust = -0.30,
+                                  colour = "black",
+                                  face = "bold",
+                                  size = 11),
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+
+gOnline <- sea_hyp1 %>%
+    filter(mer_buy_pref == "Online") %>%
+    group_by(mer_buy_pref, mer_reign) %>%
+    summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+    ggplot(aes(x = reorder(mer_reign, m), y = m)) +
+    geom_bar(stat = "identity", position = "dodge", 
+             fill = "#9ecae1") + 
+    coord_flip() +
+  scale_y_continuous(limits = c(0, 75)) +
+    theme_classic() +
+    theme(axis.line.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title = element_blank(),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_blank()) +
+  ggtitle("Online") +
+  theme(plot.title = element_text(hjust = -0.08, 
+                                  vjust = -0.30,
+                                  colour = "black",
+                                  face = "bold",
+                                  size = 11),
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+
+gMatch <- sea_hyp1 %>%
+    filter(mer_buy_pref == "During Match") %>%
+    group_by(mer_buy_pref, mer_reign) %>%
+    summarise(m = mean(sales_exp_self2016), sd = sd(sales_exp_self2016), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+    ggplot(aes(x = reorder(mer_reign, m), y = m)) +
+    geom_bar(stat = "identity", position = "dodge", fill = "#3182bd") +
+    coord_flip() +
+  scale_y_continuous(limits = c(0, 75),
+                     labels = dollar_format(prefix = "$")) +
+    theme_classic() +
+    theme(axis.line.y = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_line(colour = "grey"),
+          axis.text = element_text(size = 9),
+          legend.position = "bottom") +
+  ggtitle("Match") +
+  theme(plot.title = element_text(hjust = -0.08, 
+                                  vjust = -0.30,
+                                  colour = "black",
+                                  face = "bold",
+                                  size = 11),
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+
+base_plot1 <- cowplot::plot_grid(gStore, gOnline, gMatch, 
+                   align = "v", nrow = 3, 
+                   rel_heights = c(0.3, 0.5, 0.58),
+                   labels = "Average expenditure Season 2016",
+                   label_size = 12,
+                   hjust = -0.9,
+                   vjust = 1.7)
+save.image("base_plot1.RData")
+
+base_plot1
+```
+
+##Question 2: Which type of ticket sells the most and at what timings of the day fans like to attend the match?
+
+##1. First examine the ticket preferences of people who are planning to attend matches in season 2017
+
+
+```{r}
+# The palette with purples:
+cbPalette <- c("#dddaed","#c5b4e3", "#9578d3", "#7d55c7")
+
+#Table for ticket type for effectiveness across the whole market.
+ticket_subset <- c("3 Match Pack","5 Match Pack","Season Ticket","Single Match")
+
+ticket_t1 <- sea_reign_data %>%
+  filter(sales_tkt_type_2017 %in% ticket_subset) 
+
+ticket_t1 %>% 
+  group_by(sales_tkt_type_2017) %>% 
+  summarise(Count = n(),
+  Total_matches2017 = sum(sales_numofmatch_2017)) %>%
+  arrange(desc(Total_matches2017)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  row_spec(1, background = "#e5f5e0")
+```
+
+**Null Hypothesis: People who are planning to attend season 2017, would like to buy all types of tickets **
+
+```{r}
+sea_hyp2 <- ticket_t1 %>%
+  filter(att_attend_2017 == 1) 
+
+# Is ticket type same for everyone who is attending match in 2017?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$sales_tkt_type_2017 == "5 Match Pack"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$sales_tkt_type_2017 == "Season Ticket"])
+```
+
+```{r}
+sea_hyp2 <- ticket_t1 %>%
+  filter(att_attend_2017 == 1) 
+
+# Is ticket type same for everyone who is attending match in 2017?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$sales_tkt_type_2017 == "5 Match Pack"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$sales_tkt_type_2017 == "Single Match"])
+```
+
+```{r}
+sea_hyp2 <- ticket_t1 %>%
+  filter(att_attend_2017 == 1) 
+
+# Is ticket type same for everyone who is attending match in 2017?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$sales_tkt_type_2017 == "5 Match Pack"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$sales_tkt_type_2017 == "3 Match Pack"])
+```
+
+```{r}
+#Graphing the relationship between in-store promotions and revenue across companies.
+# 90% CI, get z-value for upper tail, use .95 since is one sided
+z <- qnorm(.95)
+
+# Incorporate CI into bar graph of means
+sea_hyp2 %>%
+  group_by(sales_tkt_type_2017) %>%
+  summarise(m = mean(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(sales_tkt_type_2017,m), y = m)) +
+  geom_bar(stat = "identity", position = "dodge", fill = "#9ecae1") +
+  geom_errorbar(aes(ymin = m - ci, ymax = m + ci), 
+                width = 0.5, position = position_dodge(0.9)) +
+
+  theme_classic() +
+  xlab("") +
+  ylab("") +
+  theme(axis.ticks.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.y = element_blank()) +
+  # To use for fills, add
+  scale_fill_manual(values=cbPalette) +
+  ggtitle("Average number of ticket people are planning buy for season 2017",
+          subtitle = "Season ticket is likely to sell the most")
+```
+
+- The figure above indicates that Season ticket is predicted to sell highest for the upcoming Season 2017
+- 5 Match Pack is least likely to sell  
+
+##2. Examine which timings are popular when people would like to attend the matches in season 2017 and buy a season ticket?
+
+```{r}
+timings_subset <- c("Sunday Evenings","Friday Evenings", 
+                    "Sunday Afternoons 4pm", "Saturday Afternoons 4pm","Saturday Afternoons 1pm")
+
+ticket_t2 <- sea_reign_data %>%
+  filter(att_most_pref_time %in% timings_subset)
+
+sea_st <- ticket_t2 %>%
+  filter(sales_tkt_type_2017 == "Season Ticket") %>%
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "1", "0"))
+
+#Create a table of most preferred timing when people are likely to attend a match in 2017 season
+ticket_t2 <- sea_st %>% 
+  filter(att_attend_2017 == 1) %>%
+  group_by(att_most_pref_time) %>% 
+  summarise(Count = n(),
+  Total_matches2017 = sum(sales_numofmatch_2017)) %>%
+  arrange(desc(Total_matches2017)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive")) %>%
+  row_spec(5, background = "#fee0d2")
+
+ticket_t2
+```
+
+- Sunday Evenings is the most popular timing among fans to attend the Seattle Reign FC match
+
+**Null Hypothesis: Average number tickets sold will be same at all timings with or without promos for Season 2017 **
+
+```{r}
+sea_hyp2 <- sea_st %>%
+  filter(promo == 1)
+
+# Is number of tickets sold same at all timings whether running a promo or not?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time == "Sunday Evenings"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time != "Friday Evenings"])
+
+```
+
+```{r}
+sea_hyp2 <- sea_st %>%
+  filter(promo == 1)
+
+# Is number of tickets sold same at all timings whether running a promo or not?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time == "Sunday Evenings"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time != "Saturday Afternoons 1pm"])
+
+```
+
+```{r}
+sea_hyp2 <- sea_st %>%
+  filter(promo == 1)
+
+# Is number of tickets sold same at all timings whether running a promo or not?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time == "Sunday Evenings"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time != "Sunday Afternoons 4pm"])
+
+```
+
+```{r}
+sea_hyp2 <- sea_st %>%
+  filter(promo == 1)
+
+# Is number of tickets sold same at all timings whether running a promo or not?
+t.test(sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time == "Sunday Evenings"], 
+       sea_hyp2$sales_numofmatch_2017[sea_hyp2$att_most_pref_time != "Saturday Afternoons 4pm"])
+
+```
+
+```{r}
+#Graphing mean promotional revenue across General Mill branded cereals.
+# 90% CI, get z-value for upper tail, use .95 since is one sided
+z <- qnorm(.95)
+
+
+# Incorporate CI into bar graph of means
+sea_st %>%
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "Positive", "None")) %>%
+  mutate(pref_time = case_when(att_most_pref_time == "Friday Evenings" ~ "Fri Evenings",
+                               att_most_pref_time == "Saturday Afternoons 4pm" ~ "Sat Aft4pm",
+                               att_most_pref_time == "Sunday Afternoons 4pm" ~ "Sun Aft4pm",
+                               att_most_pref_time == "Saturday Afternoons 1pm" ~ "Sat Aft1pm",
+                               att_most_pref_time == "Sunday Evenings" ~ "Sun Evenings")) %>%
+  group_by(pref_time, promo) %>%
+  summarise(m = mean(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017)/5, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(pref_time, m), y = m, fill = reorder(promo,m))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = m - ci, ymax = m + ci), 
+                width = 0.5, position = position_dodge(0.9)) +
+  
+#  coord_flip() +
+  theme_classic() +
+  xlab("") +
+  labs(fill = "Promo Effect") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  # To use for fills, add
+  scale_fill_manual(values=cbPalette) +
+  ggtitle("Mean number of Season Tickets likely to sell in Season 2017",
+          subtitle = "Promos are not effective on weekend matches")
+
+
+
+```
+
+```{r}
+# The palette with purples:
+cbPalette <- c("#dddaed","#c5b4e3", "#9578d3", "#7d55c7")
+
+base_plot5 <- 
+sea_st %>%
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "Positive", "None")) %>%
+  mutate(pref_time = case_when(att_most_pref_time == "Friday Evenings" ~ "Fri Evenings",
+                               att_most_pref_time == "Saturday Afternoons 4pm" ~ "Sat Aft4pm",
+                               att_most_pref_time == "Sunday Afternoons 4pm" ~ "Sun Aft4pm",
+                               att_most_pref_time == "Saturday Afternoons 1pm" ~ "Sat Aft1pm",
+                               att_most_pref_time == "Sunday Evenings" ~ "Sun Evenings")) %>%
+  group_by(pref_time, promo) %>%
+  summarise(m = mean(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017)/5, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(pref_time, m), y = m, fill = promo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = round(m, 1)), vjust = -0.5, color = "black",
+            position = position_dodge(.9), size = 2.5) +
+#  coord_flip() +
+  theme_classic() +
+  xlab("") +
+  ylab("Mean") +
+  labs(fill = "Promo Effect") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  scale_fill_manual(values=cbPalette) +
+  ggtitle("Predicted Mean number of Season Tickets likely to sell in Season 2017",
+          subtitle = "Promos are statistically effective on Sat afternoon only")
+save.image("base_plot5.RData")
+
+base_plot5
+```
+
+```{r}
+
+audience_subset <- c("College Graduate", "Graduate Degree","Some College", 
+                    "High School Graduate")
+timings_subset <- c("Sunday Evenings",
+                    "Sunday Afternoons 4pm", "Saturday Afternoons 4pm", "Friday Evenings", "Saturday Afternoons 1pm")
+audience_new <- sea_st %>%
+  filter(dem_education %in% audience_subset) %>%
+  filter(att_most_pref_time %in% timings_subset)
+
+
+base_plot6 <-
+audience_new %>%
+  mutate(audience = if_else(dem_education == "Some College", "Some College", 
+                        if_else(dem_education == "Graduate Degree", "Graduate Degree", "College Graduate"))) %>%
+  group_by(att_most_pref_time, audience) %>%
+  summarise(mean = mean(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(att_most_pref_time, mean), y = mean, fill = audience)) +
+  geom_bar(stat = "identity", position = position_dodge2(preserve = "single", padding = 0)) +
+  geom_text(aes(label = round(mean, 1)), vjust = -0.5, color = "black",
+            position = position_dodge(.9), size = 2.5) +
+  theme_classic() +
+  xlab("") +
+  ylab("Mean") +
+  labs(fill = "Main Audience") +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1)) +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  
+  scale_fill_manual(values=cbPalette) +
+  ggtitle("Predicted mean of target audience, likely to attend Season 2017",
+          subtitle = "Surprisingly, only College students are more likely\nto attend matches on Saturday Afternoons1pm")
+save.image("base_plot6.RData")
+
+base_plot6
+```
+
+- In comparison to other preferred timings, Saturday Afternoon 1pm and Sunday Evenings tickets are likely to sell more when promotions are effective 
+
+```{r}
+# The palette with purples:
+cbPalette <- c("#dddaed","#c5b4e3", "#9578d3", "#7d55c7")
+
+#Table for ticket type for effectiveness across the whole market.
+ticket_subset <- c("5 Match Pack","Season Ticket","Single Match")
+timings_subset <- c("Wed Evenings", "Sunday Evenings","Friday Evenings", 
+                    "Sunday Afternoons 4pm", "Saturday Afternoons 4pm","Saturday Afternoons 1pm")
+sea_sm1 <- sea_reign_data %>%
+  filter(att_most_pref_time %in% timings_subset) %>%
+  filter(sales_tkt_type_2017 %in% ticket_subset)
+
+g5MatchPack <- sea_sm1 %>%
+    filter(sales_ticket_type == "5 Match Pack") %>%
+    group_by(sales_tkt_type_2017, att_most_pref_time) %>%
+    summarise(m = sum(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+    ggplot(aes(x = reorder(att_most_pref_time, m), y = m)) +
+    geom_bar(stat = "identity", position = "dodge", 
+             fill = "#dddaed") + 
+    coord_flip() +
+  scale_y_continuous(limits = c(0, 75)) + 
+    theme_classic() +
+    theme(axis.line.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title = element_blank(),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_blank()) +
+    ggtitle("5 Match Pack") +
+  theme(plot.title = element_text(hjust = -0.22, 
+                                  vjust = -0.30,
+                                  colour = "black",
+                                  face = "bold",
+                                  size = 11),
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+
+gSingle <- sea_sm1 %>%
+    filter(sales_tkt_type_2017 == "Single Match") %>%
+    filter(att_most_pref_time != "Sunday Evenings") %>%
+    filter(att_most_pref_time != "Sunday Afternoons 4pm") %>%
+    group_by(sales_tkt_type_2017, att_most_pref_time) %>%
+    summarise(m = sum(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+    ggplot(aes(x = reorder(att_most_pref_time, m), y = m)) +
+    geom_bar(stat = "identity", position = "dodge", 
+             fill = "#c5b4e3") + 
+    coord_flip() +
+  scale_y_continuous(limits = c(0, 75)) +
+    theme_classic() +
+    theme(axis.line.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title = element_blank(),
+          axis.text.y = element_text(size = 9),
+          axis.text.x = element_blank()) +
+  ggtitle("Single Match") +
+  theme(plot.title = element_text(hjust = -0.22, 
+                                  vjust = -0.30,
+                                  colour = "black",
+                                  face = "bold",
+                                  size = 11),
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+
+gSeason <- sea_sm1 %>%
+    filter(sales_tkt_type_2017 == "Season Ticket") %>%
+    group_by(sales_tkt_type_2017, att_most_pref_time) %>%
+    summarise(m = sum(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017), 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+    ggplot(aes(x = reorder(att_most_pref_time, m), y = m)) +
+    geom_bar(stat = "identity", position = "dodge", fill = "#9578d3") +
+    coord_flip() +
+
+    theme_classic() +
+    theme(axis.line.y = element_blank(),
+          axis.title = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_line(colour = "grey"),
+          axis.text = element_text(size = 9),
+          legend.position = "bottom") +
+  ggtitle("Season Ticket") +
+  theme(plot.title = element_text(hjust = -0.22, 
+                                  vjust = 0.30,
+                                  colour = "black",
+                                  face = "bold",
+                                  size = 11),
+        plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm"))
+
+base_plot4 <- cowplot::plot_grid(g5MatchPack, gSingle, gSeason, 
+                   align = "v", nrow = 3, 
+                   rel_heights = c(0.35, 0.35, 0.5),
+                   labels = "Predicted Ticket Sales Season 2017",
+                   label_size = 12,
+                   hjust = -0.9,
+                   vjust = 1.7)
+save.image("base_plot4.RData")
+
+base_plot4
+```
+
+Summary of EDA
+===============
+###Possible Recommendations
+
+Possible recommendations for Seattle Reign FC to increase ticket sales and attendance:
+
+- Purchasing habits of visitors, most likely to purchase from stores
+
+- Seattle Reign FC can focus on sales of Short Sleeve Shirts during the match because it is most selling merchandise for all sponsors
+
+- Since, only College Graduates are likely to attend matches on Saturday Afternoons 1pm, it is important to find out reasons of why the College and Graduate students are not attending the match, is the distance of stadium far from the city to attend with family?    
+
+
+Statistical Analysis
+====================
+
+#1. Cross-tab of Buying preference and purchase sponsors
+
+Check number of observations in each Category-Region pair  
+
+```{r}
+# Number of observations helps us determine if stats will be valid
+sea_reign_data %>% 
+  tabyl(mer_buy_pref, mer_purchase_sponsors) %>% 
+  adorn_totals(where = c("row", "col"))
+
+```
+
+Large enough number of observations for each cell indicate sample results will be statistically valid  
+
++ Assuming this is a representative sample  
+
+    
+#2. Chi-square of Buying preference and purchase sponsors 
+
++ Tell if there is a pattern for which sponsors have buying preference  
+    - Are the factor levels independent  
+
++ Null hypothesis: Are all cells the same  
+
+
+```{r}
+# Are Category and Region sales similar?
+# Not tidyverse so have to use base code
+chisq.test(table(sea_reign_data$mer_buy_pref, sea_reign_data$mer_purchase_sponsors))
+
+```
++ Statistical measures
+    - p-value: Small p-value; reject the null hypothesis  
+    - chi-square: High value; reject the null hypothesis  
+
++ Confidence intervals  
+    - Because is a sample we cannot be sure our descriptive statistics are representative of the population  
+    - Use CI of given level of significance to assess the reliability of results  
+    - CI are good for visualization  
+    
+#3. Significance of correlation  
+
++ Null hypothesis: self and other expenditure sold are not correlated
+
+```{r}
+# Are the correlations statistically significant?
+# Not tidyverse so have to use base code
+cor.test(sea_reign_data$sales_exp_oth2016, sea_reign_data$sales_exp_self2016)
+
+```
+
++ Statistical measures
+    - p-value: small p-value, we reject the null   
+    - t-stat: large, reject the null  
+
+#4. Table of proportions with confidence intervals   
+
++ Factor variable descriptive statistics  
+    - Count - does not generalize from sample to population  
+    - Proportion - is a good descriptive stat  
+
+
+```{r}
+# Table of counts to calculate the confidence interval
+P_B_n <- sea_reign_data %>% 
+  group_by(mer_buy_pref, mer_purchase_sponsors) %>% 
+  summarise(n = n())
+
+# Calulate confidence intervals using mulitnomialCI           
+P_B_n_ci <- multinomialCI(t(P_B_n[, 3]), 0.05) # use t() to transpose the count table
+                                               # alpha = 0.05 indicates 95% confidence level
+
+# Table with proportions  
+P_B_table <- sea_reign_data %>% 
+  group_by(mer_buy_pref, mer_purchase_sponsors) %>% 
+  summarise(prop = n()/sum(nrow(sea_reign_data)))
+
+# Add the confindence inervals to the table of proportions
+P_B_table$ci_l <- P_B_n_ci[,1]
+P_B_table$ci_u <- P_B_n_ci[,2]
+
+# Show the table
+(P_B_table)
+
+```
+
+
+#5. Incorporate CI into bar graph of means   
+
+```{r}
+#Graphing mean promotional revenue across General Mill branded cereals.
+# 90% CI, get z-value for upper tail, use .95 since is one sided
+z <- qnorm(.95)
+
+# Incorporate CI into bar graph of means
+sea_st %>%
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "Positive", "None")) %>%
+  mutate(pref_time = case_when(att_most_pref_time == "Friday Evenings" ~ "Fri Evenings",
+                               att_most_pref_time == "Saturday Afternoons 4pm" ~ "Sat Aft4pm",
+                               att_most_pref_time == "Sunday Afternoons 4pm" ~ "Sun Aft4pm",
+                               att_most_pref_time == "Saturday Afternoons 1pm" ~ "Sat Aft1pm",
+                               att_most_pref_time == "Sunday Evenings" ~ "Sun Evenings")) %>%
+  group_by(pref_time, promo) %>%
+  summarise(m = mean(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017)/5, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(pref_time, m), y = m, fill = reorder(promo,m))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = m - ci, ymax = m + ci), 
+                width = 0.5, position = position_dodge(0.9)) +
+  
+#  coord_flip() +
+  theme_classic() +
+  xlab("") +
+  labs(fill = "Promo Effect") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  # To use for fills, add
+  scale_fill_manual(values=cbPalette) +
+  ggtitle("Mean number of Season Tickets likely to sell in Season 2017",
+          subtitle = "Promos are not effective on weekend matches")
+
+```
+
++ Interpretations 
+ 
+    1. All proportions are **reliably** greater than zero  
+    2. Sat Afternoons 1pm tickets are likely to sell most **practically** and **reliably**  
+
++ Cleaner graph
+
+```{r}
+# The palette with purples:
+cbPalette <- c("#dddaed","#c5b4e3", "#9578d3", "#7d55c7")
+
+base_plot5 <- 
+sea_st %>%
+  mutate(promo = if_else(att_promo_effect == "Positive influence", "Positive", "None")) %>%
+  mutate(pref_time = case_when(att_most_pref_time == "Friday Evenings" ~ "Fri Evenings",
+                               att_most_pref_time == "Saturday Afternoons 4pm" ~ "Sat Aft4pm",
+                               att_most_pref_time == "Sunday Afternoons 4pm" ~ "Sun Aft4pm",
+                               att_most_pref_time == "Saturday Afternoons 1pm" ~ "Sat Aft1pm",
+                               att_most_pref_time == "Sunday Evenings" ~ "Sun Evenings")) %>%
+  group_by(pref_time, promo) %>%
+  summarise(m = mean(sales_numofmatch_2017), sd = sd(sales_numofmatch_2017)/5, 
+            n = n(), ci = z * sd/sqrt(n)) %>%
+  ggplot(aes(x = reorder(pref_time, m), y = m, fill = promo)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = round(m, 1)), vjust = -0.5, color = "black",
+            position = position_dodge(.9), size = 2.5) +
+#  coord_flip() +
+  theme_classic() +
+  xlab("") +
+  ylab("Mean") +
+  labs(fill = "Promo Effect") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(axis.text = element_text(face = "bold", size = 11),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  scale_fill_manual(values=cbPalette) +
+  ggtitle("Predicted Mean number of Season Tickets likely to sell in Season 2017",
+          subtitle = "Promos are statistically effective on Sat afternoon only")
+
+```
+select(factor1_attend,att_first_attend,att_interest,att_gamewith,att_travel_mode,att_distance,
+         att_promo_effect,att_player_fan,att_seaEvent, att_most_pref_time,
+         att_least_preferred_timing,att_attend_2017,att_attend_2016, att_gamewith,
+         sales_ticket_type, sales_exp_self2016, 
+         sales_exp_oth2016,sales_numofmatch_2017,sales_tkt_type_2017,media_web,
+         media_season_newspaper,media_season_tv,
+         mer_buy_pref,cost,
+         mer_purchase_sponsors,mer_reign,dem_gender,dem_sexualOrient,dem_marital_status,
+         dem_education,sat_gameday,satisfacn_perf)  %>%
+  drop_na()
+
+#6. Multiple linear regression
+
++ Multiple linear regression controls for all variables simultaneously  
+    
+```{r}
+
+# Linear regression
+# Interaction term units and promo because number of units and promotions could affect revenue (approximately 20percent correlated)
+base <- lm(sales_exp_self2016 ~ sales_numofmatch_2017 + sales_tkt_type_2017 + mer_buy_pref + mer_purchase_sponsors + mer_reign
+           + dem_education,
+            data = sea_reign_data)
+
+# Review output
+summary(base)
+
+```
+### Observations
+ 
++ R2 is 0.2301 means the model can explain 23.01% variability in the dependent variable Expenditure
++ Controlling other variable, mer_reignNo preferences, mer_reignShort_Sleeve_Shirt and 
+  mer_purchase_sponsorsRuffneck Scarves have p-vales of 5% level(p<0.01).
+
+
+```{r}
+# plot residuals to check for patterns
+
+par(mfrow = c(1, 1))
+plot(sea_reign_data$sales_exp_self2016, base$residuals)
+plot(sea_reign_data$sales_numofmatch_2017, base$residuals)
+plot(sea_reign_data$att_distance, base$residuals)
+
+
+```
+
+
+#7.Visualization of Multiple Regression 
+
+How easy is it to understand which variables are:  
+
+1. Most statistically significant  
+2. Have the largest impact  
+
+##a. Table format
+
+```{r}
+# Pull out the coefficients and confidence interval for table and graph
+coe <- summary(base)$coefficients # get coefficients and related stats
+coe_CI <- as.data.frame(cbind(coe[-1, ], confint(base)[-1, ])) # find and bind CI, remove Intercept 
+
+# Rename results data frame
+names(coe_CI) <- c("estimate", "se", "t", "pval","low_CI","high_CI") 
+
+htmlTable(round(coe_CI,3))
+
+```
+##b. Table: Order based on p-value
+
+```{r}
+# Make a neat table
+htmlTable(round(coe_CI[order(coe_CI$pval, decreasing = FALSE), ], 3))
+
+```
+
++ The p of 0  means that the results are highly significant, it suggests there was absolutely no or zero chance of getting the results if the null hypothesis was true
+
+##c. Cleveland dot plot  
+
+```{r}
+# Cleveland dot plot of results
+ggplot(coe_CI, aes(x = estimate, y = row.names(coe_CI))) +
+  geom_point(size = 3) +
+  xlim(min(coe_CI$low_CI), max(coe_CI$high_CI)) +
+  ylab("Variable") +
+  xlab("Coefficient") +
+  theme_bw()
+
+```
+  
+
+##d. Cleveland dot plot - Order based on p-value
+
+This will order by most statistically significant  
+
+```{r}
+# Reorder for more clarity
+(g1 <- ggplot(coe_CI, aes(x = estimate, y = reorder(row.names(coe_CI),desc(pval)))) +
+  geom_point(size = 3) +
+  xlim(min(coe_CI$low_CI), max(coe_CI$high_CI)) +
+  ylab("Variable") +
+  xlab("Coefficient") +
+  theme_bw() 
+)
+ 
+```
+
+    
+#8. How about include CI
+
++ Visualize which variables have coefficients statistically different from zero  
+
+```{r}
+# Use geom_segment to illustrate CI
+(g2 <- g1 +
+  geom_segment(aes(yend = reorder(row.names(coe_CI),desc(pval))), 
+               xend = coe_CI$high_CI, color = "Blue") +
+  geom_segment(aes(yend = reorder(row.names(coe_CI),desc(coe_CI$pval))), 
+               xend = coe_CI$low_CI, color = "Blue") +
+   xlab("Coefficient with Confidence Interval")
+)
+
+```
+
++ Vertical line at 0
++ Volume, interaction term adNONE:units, adB:units do not have CI bar 
++ The p-value for each term tests the null hypothesis that the coefficient is equal to zero (no effect)
+
+
+```{r}
+# Line at 0 gives context
+(g3 <- g2 +
+  geom_vline(xintercept = 0, color = "red"))
+
+```
+
+
+#Summary of findings
+
++ If a 95% confidence interval includes the null value, then there is no statistically meaningful or statistically   significant difference between the groups
++ All variables have CI bar
++ dem_educationOther has highest CI bar, more statistically significant
+
+
+
+
+
+
+
